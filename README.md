@@ -1,8 +1,9 @@
 # ext2-boot
 
 ### x86 bootloader for ext2 filesystems and elf32 kernels
+ext2-boot aims to be a configurable bootloader utilizing the reserved bootloader block from the ext2 specification to load and run 32 bit ELF executables.
+![alt tag](https://raw.githubusercontent.com/lazear/ext2-boot/master/bootloader.png)
 
-ext2-boot makes use of the reserved ext2 bootloader inode - #5 to store it's second stage elf loader.
 #### To-Do:
 * Add in configuration file
 * Add in video-mode parser, memory mapping, etc
