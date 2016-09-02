@@ -53,9 +53,9 @@ void elf_objdump(void* data) {
 		vga_putc('\t');
 		vga_puts(itoa(phdr->p_filesz, 10));
 		vga_putc('\t');
-		vga_puts(itoa(phdr->p_memsz, 10));
+		vga_puts(itoa(phdr->p_memsz, 16));
 		vga_putc('\t');
-		vga_puts(itoa(phdr->p_align, 16));
+	//	vga_puts(itoa(phdr->p_align, 16));
 		vga_putc('\n');
 	//	printf("LOAD:\toff 0x%x\tvaddr\t0x%x\tpaddr\t0x%x\n\t\tfilesz\t%d\tmemsz\t%d\talign\t%d\t\n",
 	//	 	phdr->p_offset, phdr->p_vaddr, phdr->p_paddr, phdr->p_filesz, phdr->p_memsz, phdr->p_align);
@@ -101,39 +101,35 @@ void elf_objdump(void* data) {
 
 void elf_load() {
 	uint32_t* data = ext2_read_file(ext2_inode(1,12));
-
+	//uint32_t* data = ext2_file_seek(ext2_inode(1,12), 1024, 0);
 
 	elf32_ehdr * ehdr = (elf32_ehdr*) data; 
 
 	assert(ehdr->e_ident[0] == ELF_MAGIC);
 
 	elf_objdump(data);
-
+	printx("data at: ", data);
+	printx("heap at: ", malloc(0));
 	free(data);
-	return;
 
+	elf32_phdr* phdr 		= (uint32_t) data + ehdr->e_phoff;
+	elf32_phdr* last_phdr 	= (uint32_t) phdr + (ehdr->e_phentsize * ehdr->e_phnum);
+	//vga_pretty("Offset   \tVirt Addr\tPhys Addr\tFile Sz\tMem sz \tAlign  \n", VGA_LIGHTMAGENTA);
+	uint32_t off = (phdr->p_vaddr - phdr->p_paddr);
 
-	elf32_phdr* phdr = (elf32_phdr*) ((uint32_t) data + ehdr->e_phoff);
-	//printf("LOAD: off 0x%x vaddr 0x%x paddr 0x%x filesz 0x%x memsz 0x%x\n",
-	//	 				phdr->p_offset, phdr->p_vaddr, phdr->p_paddr, phdr->p_filesz, phdr->p_memsz);
-	//k_paging_map(k_page_alloc(), phdr->p_vaddr, 0x7);
-	memcpy(phdr->p_vaddr, (uint32_t)data + phdr->p_offset, phdr->p_memsz);
-
-	phdr++;
-	//printf("LOAD: off 0x%x vaddr 0x%x paddr 0x%x filesz 0x%x memsz 0x%x\n",
-	//	 				phdr->p_offset, phdr->p_vaddr, phdr->p_paddr, phdr->p_filesz, phdr->p_memsz);
-	//k_paging_map(k_page_alloc(), phdr->p_vaddr, 0x7);
-	memcpy(phdr->p_vaddr, (uint32_t)data + phdr->p_offset, phdr->p_memsz);
-	
-
+	while(phdr < last_phdr) {
+		printx("header: ", phdr->p_paddr);
+		memcpy(phdr->p_paddr, (uint32_t)data + phdr->p_offset, phdr->p_filesz);
+		phdr++;
+	} 
 
 	void (*entry)(void);
-	entry = (void(*)(void))(ehdr->e_entry);
+	entry = (void(*)(void))(ehdr->e_entry - off);
 
 	free(data);
 
-	printx("entry: %x\n", entry);
-
+	printx("entry: ", entry);
+	asm volatile("cli");
 	entry();
 
 }

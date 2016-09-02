@@ -3,3 +3,6 @@ bootloader
 boot
 *.img
 ext2util
+test.s
+test
+boot.img.bak

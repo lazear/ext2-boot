@@ -1,5 +1,5 @@
 #include "defs.h"
-
+uint32_t HEAP = 	0x00200000;
 
 void stage2_main() {
 	//clear the screen

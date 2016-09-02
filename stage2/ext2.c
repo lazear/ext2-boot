@@ -161,6 +161,26 @@ void* ext2_read_file(inode* in) {
 	return buf;
 }
 
+void* ext2_file_seek(inode* in, size_t n, size_t offset) {
+	int nblocks 	= ((n-1 + BLOCK_SIZE & ~(BLOCK_SIZE-1)) / BLOCK_SIZE);
+	int off_block 	= (offset / BLOCK_SIZE);	// which block
+	int off 		= offset % BLOCK_SIZE;		// offset in block
+
+	void* buf = malloc(nblocks*BLOCK_SIZE);		// round up to whole block size
+
+	assert(nblocks <= in->blocks/2);
+	assert(off_block <= in->blocks/2);
+	for (int i = 0; i < nblocks; i++) {
+		buffer* b = buffer_read(in->block[off_block+i]);
+		memcpy(buf + (i*BLOCK_SIZE), b->data + off, BLOCK_SIZE);
+		//printf("Read @ block %d (%d)\n",in->block[off_block+i], off_block);
+		off = 0;	// Eliminate offset after first block
+	}
+	return buf;
+
+}
+
+
 void lsroot() {
 //	vga_puts("lsroot");
 	inode* i = ext2_inode(1, 2);			// Root directory

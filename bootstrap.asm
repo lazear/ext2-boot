@@ -174,15 +174,15 @@ enter_pm:
 	mov fs, ax
 	mov gs, ax
 	mov ss, ax              ; Setup stack segment
-	mov esp, 0x900000        ; Move the stack pointer to 090000h
+	mov esp, 0x00900000        ; Move the stack pointer to 090000h
 
-	mov eax, 0xB8000
+	mov eax, 0x000B8000
 	add eax, 20
 	mov cx, 'Q'
 	mov [eax], cx
 
 	;jmp 08h:0x1000          ; Jump to section 08h (code), offset 01000h
-	jmp 0x50000
+	jmp 0x00050000
 
 	;----------Global Descriptor Table----------;
 
