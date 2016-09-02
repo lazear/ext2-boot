@@ -1,5 +1,5 @@
 [BITS 16]                       ; We need 16-bit intructions for Real mode
-
+[Org 0x7C00]
 global entry
 entry:
 
@@ -98,9 +98,10 @@ stage_oneandhalf:
 	lea di, [bx + 40]	; address of first block pointer
 	mov [block_count], cx
 
-	mov bx, 0x2000
+	mov bx, 0x5000
 	mov [db_add+2], bx
-	mov bx, 0		; where inode5 will be loaded. 0x200000
+	mov bx, 0		; where inode5 will be loaded. 0xF0000
+	mov [db_add], bx
 	call read_loop
 
 	mov si, in5_success
@@ -173,7 +174,7 @@ enter_pm:
 	mov fs, ax
 	mov gs, ax
 	mov ss, ax              ; Setup stack segment
-	mov esp, 0x10000        ; Move the stack pointer to 090000h
+	mov esp, 0x900000        ; Move the stack pointer to 090000h
 
 	mov eax, 0xB8000
 	add eax, 20
@@ -181,7 +182,7 @@ enter_pm:
 	mov [eax], cx
 
 	;jmp 08h:0x1000          ; Jump to section 08h (code), offset 01000h
-	jmp 0x20000
+	jmp 0x50000
 
 	;----------Global Descriptor Table----------;
 

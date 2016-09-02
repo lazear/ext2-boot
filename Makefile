@@ -1,4 +1,9 @@
 
+COBJS	= 	stage2/main.o \
+			stage2/ext2.o \
+			stage2/lib.o \
+			stage2/vga.o \
+			stage2/elf.o
 
 CC	    = /home/lazear/opt/cross/bin/i686-elf-gcc
 LD		= /home/lazear/opt/cross/bin/i686-elf-ld
@@ -9,17 +14,20 @@ LDFLAGS	= -Ttext 0x1000 -o bootloader
 
 all: compile clean
 
-compile:
-	nasm -f elf bootstrap.asm -o bootstrap.o
+%.o : %.c
+	$(CC) -fno-pic $(CCFLAGS) $< -o $@
 
-	$(CC) -fno-pic $(CCFLAGS) ext2_bootloader.c
-	$(LD) -N -e entry -Ttext 0x7C00 -o stage1 bootstrap.o 
-	$(LD) -N -e stage2_main -Ttext 0x20000 -o stage2 ext2_bootloader.o
+stage2: $(COBJS)
 
-	objcopy -S -O binary -j .text stage1 stage1.bin
-	objcopy -S -O binary stage2 stage2.bin
+compile: stage2
+	nasm -f bin bootstrap.asm -o stage1.bin
+
+	$(LD) -N -e stage2_main -Ttext 0x50000 -o stage2.bin $(COBJS) --oformat binary
 
 	dd if=stage1.bin of=boot.img conv=notrunc
+	../ext2util/ext2util -x boot.img -wf stage2.bin -i 5
+	../ext2util/ext2util -x boot.img -wf kernel -i 12
+
 clean:
 
-	rm *.o
+	rm stage2/*.o
