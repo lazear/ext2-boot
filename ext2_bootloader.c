@@ -35,11 +35,13 @@ find it.
 
 #include <stdint.h>
 
-void bmain() {
+
+void stage2_main() {
+	for (int i = 0; i < 80*25; i++)
+		vid[i] = '0';
 	puts("Stage2 loaded...");
 	for(;;);
 }
-
 
 void puts(char* s) {
 	while(*s) {
@@ -213,24 +215,48 @@ inode* ext2_inode(int dev, int i) {
 	return in;
 }
 
-void* ext2_open(inode* in) {
+uint32_t ext2_read_indirect(uint32_t indirect, size_t block_num) {
+	char* data = buffer_read(indirect);
+	return *(uint32_t*) ((uint32_t) data + block_num*4);
+}
+
+void* ext2_read_file(inode* in) {
 	assert(in);
 	if(!in)
 		return NULL;
+
 	int num_blocks = in->blocks / (BLOCK_SIZE/SECTOR_SIZE);	
-	if (!num_blocks){
+
+	assert(num_blocks != 0);
+	if (!num_blocks) 
 		return NULL;
+
+
+	size_t sz = BLOCK_SIZE*num_blocks;
+	void* buf = malloc(sz);
+	assert(buf != NULL);
+
+	int indirect = 0;
+
+	/* Singly-indirect block pointer */
+	if (num_blocks > 12) {
+		indirect = in->block[12];
 	}
 
-	char* buf = malloc(BLOCK_SIZE*num_blocks);
-
+	int blocknum = 0;
 	for (int i = 0; i < num_blocks; i++) {
-		char* data = buffer_read(in->block[i]);
-		memcpy((uint32_t)buf+(i*BLOCK_SIZE), data, BLOCK_SIZE);
+		if (i < 12) 
+			blocknum = in->block[i];
+		else
+			blocknum = ext2_read_indirect(indirect, i-12);
+		if (!blocknum)
+			break;
+		char* data = buffer_read(blocknum);
+		memcpy((uint32_t) buf + (i * BLOCK_SIZE), data, BLOCK_SIZE);
+		//printf("%x\n", b->data[i]);
 	}
 	return buf;
 }
-
 
 void lsroot() {
 	inode* i = ext2_inode(1, 2);			// Root directory
@@ -265,11 +291,4 @@ void lsroot() {
 
 	} while(sum < 1024);
 	return NULL;
-}
-
-
-
-uint32_t ext2_read_indirect(uint32_t indirect, size_t block_num) {
-	uint32_t* data = buffer_read(indirect);
-	return *(uint32_t*) ((uint32_t) data + block_num*4);
 }

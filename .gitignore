@@ -2,3 +2,6 @@
 stage1
 stage2
 bootloader
+boot
+*.img
+ext2util
