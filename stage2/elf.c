@@ -89,18 +89,15 @@ void elf_objdump(void* data) {
 		vga_puts(itoa(shdr->sh_addralign, 16));
 		vga_putc('\n');
 
-		//printf("%d:   %s\t%x\t%x\t%d\t%x\n", 
-		//	q++, string_table + shdr->sh_name, shdr->sh_size,
-		//	shdr->sh_addr, shdr->sh_offset, shdr->sh_addralign);
 		shdr++;
 	}
 
-	//free(buf);
 }
 
 
 void elf_load() {
-	uint32_t* data = ext2_read_file(ext2_inode(1,12));
+	inode* ki = ext2_inode(1,12);
+	uint32_t* data = ext2_read_file(ki);
 	//uint32_t* data = ext2_file_seek(ext2_inode(1,12), 1024, 0);
 
 	elf32_ehdr * ehdr = (elf32_ehdr*) data; 
@@ -114,7 +111,7 @@ void elf_load() {
 
 	elf32_phdr* phdr 		= (uint32_t) data + ehdr->e_phoff;
 	elf32_phdr* last_phdr 	= (uint32_t) phdr + (ehdr->e_phentsize * ehdr->e_phnum);
-	//vga_pretty("Offset   \tVirt Addr\tPhys Addr\tFile Sz\tMem sz \tAlign  \n", VGA_LIGHTMAGENTA);
+	
 	uint32_t off = (phdr->p_vaddr - phdr->p_paddr);
 
 	while(phdr < last_phdr) {
@@ -123,13 +120,21 @@ void elf_load() {
 		phdr++;
 	} 
 
+
+
 	void (*entry)(void);
 	entry = (void(*)(void))(ehdr->e_entry - off);
 
-	free(data);
+	// CLEAR OUT THE ENTIRE HEAP
+
+	uint32_t END_OF_HEAP = malloc(0);
+	memset(HEAP_START, 0, (END_OF_HEAP - HEAP_START));
+
+	
 
 	printx("entry: ", entry);
 	asm volatile("cli");
+
 	entry();
 
 }

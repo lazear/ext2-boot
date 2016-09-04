@@ -16,6 +16,9 @@ DISK	= boot.img
 
 
 all: compile clean
+run: compile clean emu
+
+
 
 %.o : %.c
 	$(CC) $(CCFLAGS) $< -o $@
@@ -24,9 +27,10 @@ stage2: $(COBJS)
 
 compile: stage2
 	$(AS) -f bin bootstrap.asm -o stage1.bin
-	$(AS) -f elf test.s -o test.o
-	$(LD) -N -e entry -Ttext 0x00100000 -o test test.o
-	$(LD) -N -e stage2_main -Ttext 0x50000 -o stage2.bin $(COBJS) --oformat binary
+
+	$(LD) -N -e stage2_main -Ttext 0x00050000 -o stage2.bin $(COBJS) --oformat binary
+
+	cp boot.img.bak boot.img
 	dd if=stage1.bin of=$(DISK) conv=notrunc
 
 	cp ../baremetal/bin/kernel.bin ./kernel
@@ -37,6 +41,9 @@ compile: stage2
 new:
 	dd if=/dev/zero of=boot.img bs=1k count=16k
 	sudo mke2fs boot.img
+
+emu: 
+	qemu-system-i386 -hdb boot.img -curses
 
 clean:
 

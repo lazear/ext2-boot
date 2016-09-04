@@ -37,7 +37,9 @@ extern inline uint8_t inb(uint16_t port);
 extern inline void outb(uint16_t port, uint16_t data);
 extern inline void insl(int port, void *addr, int cnt);
 
+
 extern uint32_t HEAP;
+extern uint32_t HEAP_START;
 
 #define VGA_BLACK	0x00
 #define VGA_BLUE	0x01

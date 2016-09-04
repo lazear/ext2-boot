@@ -1,25 +1,57 @@
-[BITS 16]                       ; We need 16-bit intructions for Real mode
-[Org 0x7C00]
-global entry
+;								BOOTSTRAP.S
+;==============================================================================
+;MIT License
+;Copyright (c) 2007-2016 Michael Lazear
+;
+;Permission is hereby granted, free of charge, to any person obtaining a copy
+;of this software and associated documentation files (the "Software"), to deal
+;in the Software without restriction, including without limitation the rights
+;to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+;copies of the Software, and to permit persons to whom the Software is
+;furnished to do so, subject to the following conditions:
+;
+;The above copyright notice and this permission notice shall be included in all
+;copies or substantial portions of the Software.
+;
+;THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+;OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+;SOFTWARE.
+;==============================================================================
+
+[BITS 16]
+[ORG 0x7C00]
+
+GLOBAL entry
+
+; Stage1 is responsible for loading Stage1.5, and mapping video modes
+
+
 entry:
 
-	mov bx, stage_oneandhalf
-	mov [db_add], bx
+	and dl, 0x80
+	jz error
+
+	mov [drive], dl				; BIOS stores drive # in dl
+
+	mov bx, stage_oneandhalf 	; Load into address of Stage1.5
+	mov [dest], bx
 	call read_disk
 
 	jmp stage_oneandhalf
 
 
 read_disk:
-	mov si, PACKET		; address of "disk address packet"
-	mov ah, 0x42		; AL is unused
-	mov dl, 0x80		; drive number 0 (OR the drive # with 0x80)
+	mov esi, PACKET		; address of "disk address packet"
+	mov ah, 0x42		; extended read
+	mov dl, [drive]		; drive number 0 (OR the drive # with 0x80)
 	int 0x13
 	jc error
 	ret
 
-; mov si, msg
-; call print
 print:
 	lodsb
 	or al, al		; test for NULL termination
@@ -32,63 +64,120 @@ print:
 
 
 error:
-	mov si, ext2_error
+	mov esi, ext2_error
 	call print
+	jmp $
+
+
+
+; 0x56455341 = VESA
+video_map:
+	xor eax, eax
+	mov es, ax	
+	mov bx, 0x2000
+	mov di, bx
+	mov ax, 0x4F00
+	int 0x10
+
+	cmp ax, 0x004F
+	jne .error
+
+	mov [vid_info], bx		; Store pointer to video controller array
+	mov si, [bx + 0xE]		; Offset to mode pointer
+	mov ax, [bx + 0x10]		; Segment to mode pointer
+	mov es, ax
+	lea ax, [es:si]
+	mov [vid_info+4], ax	; Pointer to mode array
+
+.loop:
+	mov bx, [es:si]			; Load BX with vidoe mode
+	cmp bx, 0xFFFF
+	je .done				; End of list
+	add si, 2
+	mov [.mode], bx
+
+	mov ax, 0x4F01			; Get mode info
+	mov cx, [.mode]
+	;mov di
+	jmp .loop
+
+.done:
 	ret
 
+.controllerinfo:			; 10 byte return
 
+.error:
+	mov si, video_error	
+	call print
+	jmp $
+
+.mode dw 0
+
+;==============================================================================
+; LBA DATA PACKET
 PACKET:
 			db	0x10	; packet size (16 bytes)
 			db	0		; always 0
-blkcnt:		dw	4		; number of sectors to transfer
-db_add:		dw	0	; memory buffer destination address (0:7c00)
-			dw	0		; in memory page zero
-d_lba:		dd	1		; put the lba to read in this spot
+count:		dw	4		; number of sectors to transfer
+dest:		dw	0		; destination offset (0:7c00)
+			dw	0		; destination segment
+lba:		dd	1		; put the lba # to read in this spot
 			dd	0		; more storage bytes only for big lba's ( > 4 bytes )
+;==============================================================================
 
 
-ext2_success	db 13, "EXT2 Magic Header Good!", 10, 0
-ext2_error		db 13, "ERROR", 10, 0
-in5_success		db 13, "Stage2 loaded!", 10, 0
-stageonepointfive db 13, "Stage1.5 loaded!", 10, 0
-protmode		db 13, "Entering PM!", 10, 0
-
-block_count		dd 0
-block_pointer	dd 0
-
+ext2_success		db 13, "EXT2 Magic Header Good!", 10, 0
+ext2_error			db 13, "EXT2 superblock not found", 10, 0
+stageonepointfive 	db 13, "Stage1.5 loaded!", 10, 0
+video_error			db 13, "VESA ERROR", 10, 0
+drive				db 0
 
 times 510-($-$$) db 0           ; Fill up the file with zeros
 dw 0AA55h                       ; Last 2 bytes = Boot sector identifyer
 
-; LBA SECTOR 1. This is not loaded by BIOS. Stage1 loads Stage1.5
+
+;==============================================================================
+; END 	LBA SECTOR 0. 
+;
+; We are now out of the zone loaded by the BIOS
+; However, Stage1 contains some useful functions that we can continue 
+; to use, since Stage1.5 is directly loaded at the end of stage1 (0x7E00)
+;
+; Stage1.5 mainly focuses on parsing ext2 data to find the blocks used for
+; inode #5, which is reserved by ext2 specific for bootloaders - and we have
+; placed the Stage2 loaded there. Memory mapping function is also placed here
+;
+; BEGIN 	LBA SECTOR 1
+;==============================================================================
+
 
 stage_oneandhalf:
 	
-	mov si, stageonepointfive
+	mov esi, stageonepointfive
 	call print
 
 	xor bx, bx
 
-	mov ax, [superblock+56]                         ; EXT2_MAGUC
+	mov ax, [superblock  +56]		; EXT2_MAGUC
 	cmp ax, 0xEF53                                          
-	jne error                                                      ; Not a valid EXT2 disk
+	jne error 						; Not a valid EXT2 disk
 
 	mov si, ext2_success
 	call print
 
 ; We need to read the inode table entry for inode 5
 
-	mov ax, [superblock + 1024 + 8]		; Block_Group_Descriptor->inode_table
+	mov ax, [superblock  + 1024 + 8]	; Block_Group_Descriptor->inode_table
 	mov cx, 2							
 	mul cx								; ax = cx * ax
 
-	mov [d_lba], ax						; which sector do we read?
+	mov [lba], ax						; which sector do we read?
 
 	mov ax, 2							; read 1024 bytes
-	mov [blkcnt], ax	
+	mov [count], ax	
 
 	mov bx, 0x1000						; copy data to 0x1000
-	mov [db_add], bx
+	mov [dest], bx
 
 	call read_disk
 
@@ -96,18 +185,77 @@ stage_oneandhalf:
 	mov bx, 0x1200		; Inode 5 is 0x200 into the first block (index 4 * 128 bytes per inode)
 	mov cx, [bx + 28]	; # of sectors for inode
 	lea di, [bx + 40]	; address of first block pointer
-	mov [block_count], cx
 
 	mov bx, 0x5000
-	mov [db_add+2], bx
+	mov [dest+2], bx
 	mov bx, 0		; where inode5 will be loaded. 0xF0000
-	mov [db_add], bx
-	call read_loop
+	mov [dest], bx
+	call read_stagetwo
 
-	mov si, in5_success
-	call print
+	call video_map
 
-	jmp enter_pm
+; Prepare to call the memory mapping function
+	xor eax, eax		; Clear EAX
+	mov es, eax			; Clear ES
+	mov edi, 0x400		; DI = 0x400. ES:DI => 0x00000400
+	push edi			; Push start of memory map
+
+	call memory_map
+	push edi			; Push end of memory map
+	jmp enter_pm 		; Enter protected mode
+
+
+; Bios function INT 15h, AX=E820h
+; EBX must contain 0 on first call, and remain unchanged
+; 	on subsequent calls until it is zero again
+; Code adapted from OSDEV wiki
+; Memory map is 24 byte struct placed at [ES:DI]
+memory_map:
+	xor ebx, ebx				; ebx must be 0 to start
+	mov edx, 0x0534D4150		; Place "SMAP" into edx
+	mov eax, 0xe820
+	mov [es:di + 20], dword 1	; force a valid ACPI 3.X entry
+	mov ecx, 24					; ask for 24 bytes
+	int 0x15
+	jc short .fail				; carry set on first call means "unsupported function"
+
+	mov edx, 0x0534D4150		; 
+	cmp eax, edx				; on success, eax must have been set to "SMAP"
+	jne short .fail
+
+	test ebx, ebx				; ebx = 0 implies list is only 1 entry long (worthless)
+	je short .fail
+
+	jmp short .loop
+
+.e820lp:
+	mov eax, 0xe820				; eax, ecx get trashed on every int 0x15 call
+	mov [es:di + 20], dword 1	; force a valid ACPI 3.X entry
+	mov ecx, 24					; ask for 24 bytes again
+	int 0x15
+	jc short .done				; carry set means "end of list already reached"
+	mov edx, 0x0534D4150		; repair potentially trashed register
+.loop:
+	jcxz .skip					; skip any 0 length entries
+	cmp cl, 20					; got a 24 byte ACPI 3.X response?
+	jbe short .notext
+	test byte [es:di + 20], 1	; if so: is the "ignore this data" bit clear?
+	je short .skip
+.notext:
+	mov ecx, [es:di + 8]		; get lower uint32_t of memory region length
+	or ecx, [es:di + 12]		; "or" it with upper uint32_t to test for zero
+	jz .skip					; if length uint64_t is 0, skip entry
+	add di, 24
+	
+.skip:
+	test ebx, ebx				; if ebx resets to 0, list is complete
+	jne short .e820lp
+.done:
+	clc							; there is "jc" on end of list to this point, so the carry must be cleared
+	ret
+.fail:
+	stc							; "function unsupported" error exit
+	ret
 
 ; We enter the loop with:
 ;	bx = inode pointer
@@ -115,112 +263,128 @@ stage_oneandhalf:
 ;	di = address of first block pointer
 ; No support for indirect pointers. So keep 
 ; stage2
-read_loop:
+read_stagetwo:
 	xor ax, ax		; clear ax
 	mov dx, ax		; clear dx
 	mov ax, [di]	; set ax = block pointer
 	mov dx, 2		; multiply by 2 for sectors
 	mul dx			; ax = dx * ax
 
-	mov [d_lba], ax
-	mov [db_add], bx
+	mov [lba], ax
+	mov [dest], bx
 
 	call read_disk
 
 	add bx, 0x400	; increase by 1 kb
 	add di, 0x4		; move to next block pointer
 	sub cx, 0x2		; reading two blocks
-	jnz read_loop
+	jnz read_stagetwo
 	ret
 
 	nop
 	hlt
 
+
 enter_pm:
-	cli
-	mov si, protmode	
-	call print
-
-
+	cli 				; Turn off interrupts
 	;xor ax, ax
-	in al, 0x92				; enable a20
+	in al, 0x92			; enable a20
 	or al, 2
 	out 0x92, al
 
-	xor ax, ax              ; Clear AX register
-	mov ds, ax              ; Set DS-register to 0 
+	xor ax, ax 			; Clear AX register
+	mov ds, ax			; Set DS-register to 0 
 	mov es, ax
 	mov fs, ax
 	mov gs, ax
 
-	lgdt [gdt_desc]         ; Load the Global Descriptor Table
+	lgdt [gdt_desc] 	; Load the Global Descriptor Table
 
-	;----------Entering Protected Mode----------;
+;==============================================================================
+; ENTER PROTECTED MODE 
 
-	mov eax, cr0            ; Copy the contents of CR0 into EAX
-	or eax, 1               ; Set bit 0     (0xFE = Real Mode)
-	mov cr0, eax            ; Copy the contents of EAX into CR0
+	mov eax, cr0
+	or eax, 1               ; Set bit 0 
+	mov cr0, eax
 
-	;jmp $
-	;sti
-	jmp 08h:pm ; Jump to code segment, offset kernel_segments
+	jmp 08h:pm 				; Jump to code segment, offset kernel_segments
 
 
-[BITS 32]                       ; We now need 32-bit instructions
+[BITS 32]
 	pm:
-	mov ax, 10h             ; Save data segment identifyer
-	mov ds, ax              ; Setup data segment
+	pop ecx					; End of memory map
+	mov [mem_info+4], ecx 
+	pop ecx
+	mov [mem_info], ecx
+
+	xor eax, eax
+
+	mov ax, 10h 			; Save data segment identifyer
+	mov ds, ax 				; Setup data segment
 	mov es, ax
 	mov fs, ax
 	mov gs, ax
-	mov ss, ax              ; Setup stack segment
-	mov esp, 0x00900000        ; Move the stack pointer to 090000h
+	mov ss, ax				; Setup stack segment
+	mov esp, 0x00900000		; Move temp stack pointer to 090000h
 
-	mov eax, 0x000B8000
-	add eax, 20
-	mov cx, 'Q'
-	mov [eax], cx
+	mov eax, vid_info
+	push eax
 
-	;jmp 08h:0x1000          ; Jump to section 08h (code), offset 01000h
-	jmp 0x00050000
+	mov eax, mem_info
+	push eax
 
-	;----------Global Descriptor Table----------;
+	mov edx, 0x00050000
+	lea eax, [edx]
+	call eax				; stage2_main(mem_info, vid_info)
+
+;==============================================================================
+; GLOBAL DESCRIPTOR TABLE
 
 align 16
+mem_info:
+	dd 0			
+	dd 0
+
+
+vid_info:
+	dd 0
+	dd 0
+	dd 0
+	dd 0
+
+align 32
 gdt:                            ; Address for the GDT
 
-gdt_null:                       ; Null Segment
+gdt_null:
 	dd 0
 	dd 0
 
-
-KERNEL_CODE             equ $-gdt		; 0x08
+;KERNEL_CODE equ $-gdt		; 0x08
 gdt_kernel_code:
-	dw 0FFFFh               ; Limit 0xFFFF
-	dw 0                    ; Base 0:15
-	db 0                    ; Base 16:23
-	db 09Ah                 ; Present, Ring 0, Code, Non-conforming, Readable
-	db 0CFh                 ; Page-granular
-	db 0                    ; Base 24:31
+	dw 0FFFFh 	; Limit 0xFFFF
+	dw 0		; Base 0:15
+	db 0		; Base 16:23
+	db 09Ah 	; Present, Ring 0, Code, Non-conforming, Readable
+	db 0CFh		; Page-granular
+	db 0 		; Base 24:31
 
-KERNEL_DATA             equ $-gdt		; 0x10
+;KERNEL_DATA equ $-gdt
 gdt_kernel_data:                        
-	dw 0FFFFh               ; Limit 0xFFFF
-	dw 0                    ; Base 0:15
-	db 0                    ; Base 16:23
-	db 092h                 ; Present, Ring 0, Data, Expand-up, Writable
-	db 0CFh                 ; Page-granular
-	db 0                    ; Base 24:32
+	dw 0FFFFh 	; Limit 0xFFFF
+	dw 0		; Base 0:15
+	db 0		; Base 16:23
+	db 092h 	; Present, Ring 0, Code, Non-conforming, Readable
+	db 0CFh		; Page-granular
+	db 0 		; Base 24:31
 
 gdt_end:                        ; Used to calculate the size of the GDT
 
 gdt_desc:                       ; The GDT descriptor
 	dw gdt_end - gdt - 1    ; Limit (size)
 	dd gdt                  ; Address of the GDT
+;==============================================================================
 
-
-times 1020-($-$$) db 0
-dd 0xDEADBEEF
+times 1024-($-$$) db 0
 
 ; We can use the end of the file for a convenient label
 ; Superblock starts at LBA 2, which is the end of this
