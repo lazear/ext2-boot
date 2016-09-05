@@ -21,6 +21,17 @@
 ;OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ;SOFTWARE.
 ;==============================================================================
+;	MEMORY MAP
+; 0x0400 : 0x0500 - memory map info
+; 0x2000 : 0x2??? - VESA controller info
+; 0x3000 : 
+; 0x5000 : 0x7200 Stage2 bootloader
+; 0x7C00 : 0x8000 Stage1/1.5 bootloader
+; 
+
+
+
+
 
 [BITS 16]
 [ORG 0x7C00]
@@ -82,36 +93,78 @@ video_map:
 	cmp ax, 0x004F
 	jne .error
 
-	mov [vid_info], bx		; Store pointer to video controller array
+	;mov [vid_info+4], bx		; Store pointer to video controller array
 	mov si, [bx + 0xE]		; Offset to mode pointer
 	mov ax, [bx + 0x10]		; Segment to mode pointer
 	mov es, ax
-	lea ax, [es:si]
-	mov [vid_info+4], ax	; Pointer to mode array
+
+	mov di, 0x3000
 
 .loop:
-	mov bx, [es:si]			; Load BX with vidoe mode
+	mov bx, [es:si]			; Load BX with video mode
 	cmp bx, 0xFFFF
 	je .done				; End of list
+
 	add si, 2
 	mov [.mode], bx
 
-	mov ax, 0x4F01			; Get mode info
+	mov ax, 0x4F01			; Get mode info pitch+16, width+18, height+20
 	mov cx, [.mode]
-	;mov di
-	jmp .loop
+
+	int 0x10
+	cmp ax, 0x004F
+	jne .error
+	xor ax, ax
+
+	mov ax, [es:di + 42]
+	mov [.framebuffer], ax
+
+	mov ax, [es:di + 16]	; pitch
+	mov bx, [es:di + 18]	; width
+	mov cx, [es:di + 20]	; height
+	mov dx, [es:di + 25]	; bpp
+	mov [.bpp], dx
+
+	add di, 0x100
+
+	cmp ax, [.pitch]
+	jne .loop
+
+	cmp bx, [.width]
+	jne .loop
+
+	cmp cx, [.height]
+	jne .loop
+
+	lea ax, [es:di - 0x100]
+	mov [vid_info.array], ax	; Pointer to mode array
+
+.setmode:
+	xor ax, ax
+	mov ax, 0x4F02		; Function AX=4F02h;
+	mov bx, [.mode]
+	mov [vid_info], bx
+	or bx, 0x4000		; enable LFB
+
+	int 0x10
+	cmp ax, 0x004F
+	jne .error
 
 .done:
 	ret
-
-.controllerinfo:			; 10 byte return
 
 .error:
 	mov si, video_error	
 	call print
 	jmp $
 
-.mode dw 0
+
+.mode 			dw 0
+.width 			dw 1024
+.height 		dw 768
+.pitch 			dw 3072
+.bpp			dw 0
+.framebuffer	dd 0
 
 ;==============================================================================
 ; LBA DATA PACKET
@@ -131,6 +184,11 @@ ext2_error			db 13, "EXT2 superblock not found", 10, 0
 stageonepointfive 	db 13, "Stage1.5 loaded!", 10, 0
 video_error			db 13, "VESA ERROR", 10, 0
 drive				db 0
+
+vid_info:
+.mode	dd 0
+.array 	dd 0
+
 
 times 510-($-$$) db 0           ; Fill up the file with zeros
 dw 0AA55h                       ; Last 2 bytes = Boot sector identifyer
@@ -193,7 +251,6 @@ stage_oneandhalf:
 	call read_stagetwo
 
 	call video_map
-
 ; Prepare to call the memory mapping function
 	xor eax, eax		; Clear EAX
 	mov es, eax			; Clear ES
@@ -329,10 +386,8 @@ enter_pm:
 
 	mov eax, vid_info
 	push eax
-
 	mov eax, mem_info
 	push eax
-
 	mov edx, 0x00050000
 	lea eax, [edx]
 	call eax				; stage2_main(mem_info, vid_info)
@@ -346,11 +401,6 @@ mem_info:
 	dd 0
 
 
-vid_info:
-	dd 0
-	dd 0
-	dd 0
-	dd 0
 
 align 32
 gdt:                            ; Address for the GDT
