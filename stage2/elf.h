@@ -96,6 +96,7 @@ typedef struct {
 } elf32_phdr;
 
 
+// table index 0 is reserved
 typedef struct {
 	uint16_t st_name;
 	uint32_t st_value;
@@ -108,3 +109,8 @@ typedef struct {
 #define STB_LOCAL 	0
 #define STB_GLOBAL 	1
 #define STT_NOTYPE	0
+#define STT_OBJECT	1
+#define STT_FUNC	2
+#define STT_SECTION	3
+#define STT_FILE	4
+

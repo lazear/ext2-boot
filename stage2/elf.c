@@ -27,7 +27,7 @@ SOFTWARE.
 #include "defs.h"
 #include "ext2.h"
 #include "elf.h"
-
+#include "crunch.h"
 
 void elf_objdump(void* data) {
 	elf32_ehdr *ehdr = (elf32_ehdr*) data;
@@ -68,8 +68,6 @@ void elf_objdump(void* data) {
 	elf32_shdr* sh_str		= (uint32_t) shdr + (ehdr->e_shentsize * ehdr->e_shstrndx);
 	elf32_shdr* last_shdr 	= (uint32_t) shdr + (ehdr->e_shentsize * ehdr->e_shnum);
 
-	elf32_shdr* strtab 		= NULL;
-	elf32_shdr* symtab		= NULL;
 	char* string_table 		= (uint32_t) data + sh_str->sh_offset;
 
 	shdr++;					// Skip null entry
@@ -82,11 +80,6 @@ void elf_objdump(void* data) {
 		vga_puts(string_table + shdr->sh_name);
 		if (strlen(string_table + shdr->sh_name) < 6)
 			vga_puts("\t");
-		/* Save the string and symbol table headers */
-		if (strcmp(string_table + shdr->sh_name, ".symtab") == 0) 
-			symtab = shdr;
-		if (strcmp(string_table + shdr->sh_name, ".strtab") == 0)
-			strtab = shdr;
 		vga_putc('\t');
 		vga_puts(itoa(shdr->sh_size, 16));
 		vga_putc('\t');
@@ -99,29 +92,10 @@ void elf_objdump(void* data) {
 
 		shdr++;
 	}
-
-	if (!strtab || !symtab) {
-		vga_puts("ERROR: Could not load symbol table");
-		return;
-	}
-
-	elf32_sym* sym 		= (uint32_t) data + symtab->sh_offset;
-	elf32_sym* last_sym = (uint32_t) sym + symtab->sh_size;
-	void* strtab_d 		= (uint32_t) data + strtab->sh_offset;
-	/* Output symbol information*/
-	while(sym < last_sym) {
-		if (sym->st_name) {
-				vga_puts(sym->st_name + strtab_d);
-				vga_puts("\t0x");
-				vga_puts(itoa(sym->st_value + sym->st_size, 16));
-				vga_putc('\n');
-		}
-		sym++;
-	}
 }
 
 
-void elf_load(uint32_t* one, uint32_t* two) {
+void elf_load(mmap* one, gfx_context* two) {
 	inode* ki = ext2_inode(1,12);
 	uint32_t* data = ext2_read_file(ki);
 	//uint32_t* data = ext2_file_seek(ext2_inode(1,12), 1024, 0);
@@ -148,7 +122,7 @@ void elf_load(uint32_t* one, uint32_t* two) {
 
 
 
-	void (*entry)(uint32_t*, uint32_t*);
+	void (*entry)(mmap*, gfx_context*);
 	entry = (void(*)(void))(ehdr->e_entry - off);
 
 	// CLEAR OUT THE ENTIRE HEAP
@@ -156,11 +130,9 @@ void elf_load(uint32_t* one, uint32_t* two) {
 	uint32_t END_OF_HEAP = malloc(0);
 	memset(HEAP_START, 0, (END_OF_HEAP - HEAP_START));
 
-	
 
 	printx("entry: ", entry);
 	asm volatile("cli");
-
-	//entry(one, two);
+	entry(one, two);
 
 }
