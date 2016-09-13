@@ -146,9 +146,9 @@ video_map:
 	mov [vid_info], bx
 	or bx, 0x4000		; enable LFB
 
-	int 0x10
-	cmp ax, 0x004F
-	jne .error
+	; int 0x10
+	; cmp ax, 0x004F
+	; jne .error
 
 .done:
 	ret

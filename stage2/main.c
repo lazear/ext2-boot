@@ -51,6 +51,16 @@ typedef struct _vid_info {
 	uint32_t mode;
 	vbe* info;
 } vid_info;
+
+
+typedef struct _gfx_context {
+	uint16_t pitch;
+	uint16_t width;
+	uint16_t height;
+	uint8_t bpp;
+	uint32_t framebuffer;
+} gfx_context;
+
 #define RGB(r,g,b) (((r&0xFF)<<16) | ((g&0xFF)<<8) | (b & 0xFF))
 
 static void putpixel(unsigned char* screen, int x,int y, int color);
@@ -70,11 +80,22 @@ void stage2_main(uint32_t* mem_info, vid_info* v) {
 //	struct vbe* v2 = v->info;
 	vga_puts(itoa(v->info->framebuffer, 16));
 
-	for (int i =0; i < 1000; i++) {
-		putpixel(v->info->framebuffer, i, i%768, RGB(~i,i,i));
-		putpixel(v->info->framebuffer, ~i, i%768, RGB(i,~i,i));
-	//	putpixel(v->info->framebuffer, i, 768-i, RGB(i,i,i));
-	}
+	gfx_context *c = (gfx_context*) 0x000F0000;
+	c->pitch = v->info->pitch;
+	c->width = v->info->width;
+	c->height = v->info->height;
+	c->bpp = v->info->bpp;
+	c->framebuffer = v->info->framebuffer;
+	memcpy(0x000F1000, m, (uint32_t) max - (uint32_t) m);
+
+
+
+
+	// for (int i =0; i < 1000; i++) {
+	// 	putpixel(v->info->framebuffer, i, i%768, RGB(~i,i,i));
+	// 	putpixel(v->info->framebuffer, ~i, i%768, RGB(i,~i,i));
+	// //	putpixel(v->info->framebuffer, i, 768-i, RGB(i,i,i));
+	// }
 
 	// while (m < max) {
 	// 	vga_pretty("ENTRY\n", VGA_LIGHTGREEN);
@@ -97,7 +118,7 @@ void stage2_main(uint32_t* mem_info, vid_info* v) {
 	// }
 
 
-	//elf_load(); 
+	elf_load(mem_info, c); 
 
 	for(;;);
 }
