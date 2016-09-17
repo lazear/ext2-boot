@@ -16,7 +16,7 @@ DISK	= boot.img
 
 
 all: compile clean
-run: compile clean emu
+run: kernel compile clean emu
 
 
 
@@ -24,6 +24,10 @@ run: compile clean emu
 	$(CC) $(CCFLAGS) $< -o $@
 
 stage2: $(COBJS)
+
+
+kernel:
+	make -C ../crunchy
 
 compile: stage2
 	$(AS) -f bin bootstrap.asm -o stage1.bin
@@ -33,7 +37,7 @@ compile: stage2
 	cp boot.img.bak boot.img
 	dd if=stage1.bin of=$(DISK) conv=notrunc
 
-	cp ../baremetal/bin/kernel.bin ./kernel
+	cp ../crunchy/bin/kernel.bin ./kernel
 
 	$(EXT2UTIL) -x $(DISK) -wf stage2.bin -i 5
 	$(EXT2UTIL) -x $(DISK) -wf kernel -i 12

@@ -379,9 +379,10 @@ enter_pm:
 	mov ax, 10h 			; Save data segment identifyer
 	mov ds, ax 				; Setup data segment
 	mov es, ax
+	mov ss, ax				; Setup stack segment
 	mov fs, ax
 	mov gs, ax
-	mov ss, ax				; Setup stack segment
+
 	mov esp, 0x00900000		; Move temp stack pointer to 090000h
 
 	mov eax, vid_info

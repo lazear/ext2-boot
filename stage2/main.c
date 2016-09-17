@@ -15,11 +15,11 @@ void stage2_main(uint32_t* mem_info, vid_info* v) {
 
 	mmap* m = (mmap*) *mem_info;
 	mmap* max = (mmap*) *++mem_info;
-	printx("Mode:", v->mode);
-	printx("Mode:", v->info);
+	printx("Video Mode:", v->mode);
+	vga_puts("framebuffer@ 0x");
 
 	vga_puts(itoa(v->info->framebuffer, 16));
-
+	vga_putc('\n');
 	/* Don't use the heap, because it's going to be wiped */
 	gfx_context *c = (gfx_context*) 0x000F0000;
 	c->pitch = v->info->pitch;
@@ -29,8 +29,28 @@ void stage2_main(uint32_t* mem_info, vid_info* v) {
 	c->framebuffer = v->info->framebuffer;
 	memcpy(0x000F1000, m, (uint32_t) max - (uint32_t) m);
 
+		vga_pretty("Memory map:\n", VGA_LIGHTGREEN);
+	while (m < max) {
 
-	elf_load(m, c); 
+		vga_puts(itoa(m->base, 16));
+		vga_putc('-');
+		vga_puts(itoa(m->len + m->base, 16));
+		vga_putc('\t');
+		//vga_puts(itoa(m->type, 10));
+		switch((char)m->type) {
+			case 1: {
+				vga_puts("Usable Ram\n");
+				break;
+			} case 2: {
+				vga_puts("Reserved\n");
+				break;
+			} default:
+				vga_putc('\n');
+		}
+
+		m++;
+	}
+	//elf_load(m, c); 
 	/* We should never reach this point */
 	for(;;);
 }
