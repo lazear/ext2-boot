@@ -147,19 +147,23 @@ void* ext2_read_file(inode* in) {
 	}
 
 	int blocknum = 0;
+	char* data;
 	for (int i = 0; i < num_blocks; i++) {
-		if (i < 12) 
+		if (i < 12) {
 			blocknum = in->block[i];
-		else
-			blocknum = ext2_read_indirect(indirect, i-12);
-		if (!blocknum)
-			break;
-		char* data = buffer_read(blocknum);
-		memcpy((uint32_t) buf + (i * BLOCK_SIZE), data, BLOCK_SIZE);
-		//printf("%x\n", b->data[i]);
+			char* data = buffer_read(blocknum);
+			memcpy((uint32_t) buf + (i * BLOCK_SIZE), data, BLOCK_SIZE);
+		}
+		if (i > 12) {
+			blocknum = ext2_read_indirect(indirect, i-13);
+			char* data = buffer_read(blocknum);
+			memcpy((uint32_t) buf + ((i-1) * BLOCK_SIZE), data, BLOCK_SIZE);
+		}
+
 	}
 	return buf;
 }
+
 
 void* ext2_file_seek(inode* in, size_t n, size_t offset) {
 	int nblocks 	= ((n-1 + BLOCK_SIZE & ~(BLOCK_SIZE-1)) / BLOCK_SIZE);
@@ -178,6 +182,41 @@ void* ext2_file_seek(inode* in, size_t n, size_t offset) {
 	}
 	return buf;
 
+}
+
+/* Finds an inode by name in dir_inode */
+int ext2_find_child(const char* name, int dir_inode) {
+	if (!dir_inode)
+		return -1;
+	inode* i = ext2_inode(1, dir_inode);			// Root directory
+
+	char* buf = malloc(BLOCK_SIZE*i->blocks/2);
+	memset(buf, 0, BLOCK_SIZE*i->blocks/2);
+
+	for (int q = 0; q < i->blocks / 2; q++) {
+		char* data = buffer_read(i->block[q]);
+		memcpy((uint32_t)buf+(q * BLOCK_SIZE), data, BLOCK_SIZE);
+	}
+
+	dirent* d = (dirent*) buf;
+	
+	int sum = 0;
+	int calc = 0;
+	do {
+		// Calculate the 4byte aligned size of each entry
+		calc = (sizeof(dirent) + d->name_len + 4) & ~0x3;
+		sum += d->rec_len;
+		//printf("%2d  %10s\t%2d %3d\n", (int)d->inode, d->name, d->name_len, d->rec_len);
+		if (strncmp(d->name, name, d->name_len)== 0) {
+			
+			free(buf);
+			return d->inode;
+		}
+		d = (dirent*)((uint32_t) d + d->rec_len);
+
+	} while(sum < (1024 * i->blocks/2));
+	free(buf);
+	return -1;
 }
 
 

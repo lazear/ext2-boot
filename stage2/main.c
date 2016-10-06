@@ -5,6 +5,7 @@ uint32_t HEAP = 	0x00200000;
 uint32_t HEAP_START;
 
 static void putpixel(unsigned char* screen, int x,int y, int color);
+void parse_config(char* config);
 
 void stage2_main(uint32_t* mem_info, vid_info* v) {
 	//clear the screen
@@ -29,7 +30,7 @@ void stage2_main(uint32_t* mem_info, vid_info* v) {
 	c->framebuffer = v->info->framebuffer;
 	memcpy(0x000F1000, m, (uint32_t) max - (uint32_t) m);
 
-		vga_pretty("Memory map:\n", VGA_LIGHTGREEN);
+	vga_pretty("Memory map:\n", VGA_LIGHTGREEN);
 	while (m < max) {
 
 		vga_puts(itoa(m->base, 16));
@@ -39,20 +40,34 @@ void stage2_main(uint32_t* mem_info, vid_info* v) {
 		//vga_puts(itoa(m->type, 10));
 		switch((char)m->type) {
 			case 1: {
-				vga_puts("Usable Ram\n");
+				vga_puts("Usable Ram\t");
+
 				break;
 			} case 2: {
-				vga_puts("Reserved\n");
+				vga_puts("Reserved\t");
 				break;
 			} default:
 				vga_putc('\n');
 		}
-
+				vga_puts(itoa(m->len/0x400, 10));
+				vga_puts(" KB\n");
 		m++;
 	}
-	//elf_load(m, c); 
+
+	int boot_conf_inode = ext2_find_child("boot.conf", 2);
+
+	char* config = ext2_read_file(ext2_inode(1, boot_conf_inode));
+	parse_config(config);
+
+
 	/* We should never reach this point */
 	for(;;);
+}
+
+void parse_config(char* config) {
+	vga_puts(config);
+	
+
 }
 
 static void putpixel(unsigned char* screen, int x,int y, int color) {

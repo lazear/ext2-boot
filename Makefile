@@ -17,7 +17,7 @@ DISK	= boot.img
 
 all: compile clean
 run: kernel compile clean emu
-
+nok: compile clean emu
 
 
 %.o : %.c
@@ -37,10 +37,11 @@ compile: stage2
 	cp boot.img.bak boot.img
 	dd if=stage1.bin of=$(DISK) conv=notrunc
 
-	cp ../crunchy/bin/kernel.bin ./kernel
+	#cp ../crunchy/bin/kernel.bin ./kernel
 
 	$(EXT2UTIL) -x $(DISK) -wf stage2.bin -i 5
-	$(EXT2UTIL) -x $(DISK) -wf kernel -i 12
+	$(EXT2UTIL) -x $(DISK) -wf kernel
+	$(EXT2UTIL) -x $(DISK) -wf boot.conf
 
 new:
 	dd if=/dev/zero of=boot.img bs=1k count=16k
